@@ -52,9 +52,9 @@ parser.add_argument('--timestamp', type=str, default='none', help='timestamp for
 #added PASTA args (default params for CSG-PASTA training)
 parser.add_argument("--use_PASTA", action="store_true", help="Whether to use PASTA or not")
 parser.add_argument("--PASTA_mode", default="prop", help="Mode for PASTA: const or prop")
-parser.add_argument("--PASTA_alpha", default=10, help="PASTA alpha value")
-parser.add_argument("--PASTA_beta", default=0.5, help="PASTA beta value")
-parser.add_argument("--PASTA_k", default=1, help="PAST k (exponent) value")
+parser.add_argument("--PASTA_alpha", default=10, type=float, help="PASTA alpha value")
+parser.add_argument("--PASTA_beta", default=0.5, type=float, help="PASTA beta value")
+parser.add_argument("--PASTA_k", default=1, type=float, help="PASTA k (exponent) value")
 parser.add_argument('--no_randaug', action='store_true', default=False, help='Whether to remove randaug in CSG')
 parser.set_defaults(bottleneck=True)
 
@@ -118,7 +118,7 @@ def main():
         
         # add PASTA augmentation with mode, alpha, beta, k params
         if args.use_PASTA:
-            data_transforms['train']..transforms.insert(0, PASTA(args.PAST, args.PASTA_alpha, args.PASTA_beta, args.PASTA_k))
+            data_transforms['train'].transforms.insert(0, PASTA(args.PASTA_mode, args.PASTA_alpha, args.PASTA_beta, args.PASTA_k))
         
         print("Transforms Augmentation Set", data_transforms['train'])
 
@@ -352,11 +352,11 @@ def accuracy_ranking(output, target, topk=(1,)):
 
         _, pred = output.topk(maxk, 1, True, True)
         pred = pred.t()
-        correct = pred.eq(target.view(1, -1).expand_as(pred))
+        correct = pred.eq(target.reshape(1, -1).expand_as(pred))
 
         res = []
         for k in topk:
-            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+            correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
 
