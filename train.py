@@ -22,12 +22,13 @@ from utils.utils import get_params, IterNums, save_checkpoint, AverageMeter, lr_
 from utils.logger import prepare_logger, prepare_seed
 from utils.sgd import SGD
 from utils.augmentations import RandAugment, augment_list
+from utils.PASTA import PASTA
 
 torch.backends.cudnn.enabled = True
 CrossEntropyLoss = nn.CrossEntropyLoss(reduction='mean')
 
 parser = argparse.ArgumentParser(description='PyTorch ResNet Training')
-parser.add_argument('--data', default='/home/chenwy/taskcv-2017-public/classification/data', help='path to dataset')
+parser.add_argument('--data', default='/srv/datasets/visda', help='path to dataset')
 parser.add_argument('--epochs', default=30, type=int, help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, help='manual start epoch number (useful on restarts)')
 parser.add_argument('--batch-size', default=32, type=int, dest='batch_size', help='mini-batch size (default: 64)')
@@ -48,6 +49,13 @@ parser.add_argument('--save_dir', type=str, default="./runs", help='root folder 
 parser.add_argument('--rand_seed', default=0, type=int, help='random seed')
 parser.add_argument('--csg-k', default=65536, type=int, help='queue size; number of negative keys (default: 65536)')
 parser.add_argument('--timestamp', type=str, default='none', help='timestamp for logging naming')
+#added PASTA args (default params for CSG-PASTA training)
+parser.add_argument("--use_PASTA", action="store_true", help="Whether to use PASTA or not")
+parser.add_argument("--PASTA_mode", default="prop", help="Mode for PASTA: const or prop")
+parser.add_argument("--PASTA_alpha", default=10, help="PASTA alpha value")
+parser.add_argument("--PASTA_beta", default=0.5, help="PASTA beta value")
+parser.add_argument("--PASTA_k", default=1, help="PAST k (exponent) value")
+parser.add_argument('--no_randaug', action='store_true', default=False, help='Whether to remove randaug in CSG')
 parser.set_defaults(bottleneck=True)
 
 best_prec1 = 0
@@ -82,6 +90,8 @@ def main():
                     batch_size=args.batch_size,
                     seed=args.rand_seed
                     ) + \
+            "%s"%("-PASTA-mode_%s-alpha_%s-beta_%s-k_%s"%(args.PASTA_mode, args.PASTA_alpha, args.PASTA_beta, args.PASTA_k) if args.use_PASTA else '') + \
+            "%s"%("-no_randaug" if args.no_randaug else '') + \
             "%s/%s"%('/'+args.resume.replace('/', '+') if args.resume != 'none' else '', args.timestamp)
     logger = prepare_logger(args)
 
@@ -101,6 +111,17 @@ def main():
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
+
+        # remove randaug if arg is passed
+        if args.no_randaug:
+            data_transforms['train'].transforms.pop(0)
+        
+        # add PASTA augmentation with mode, alpha, beta, k params
+        if args.use_PASTA:
+            data_transforms['train']..transforms.insert(0, PASTA(args.PAST, args.PASTA_alpha, args.PASTA_beta, args.PASTA_k))
+        
+        print("Transforms Augmentation Set", data_transforms['train'])
+
     else:
         data_transforms['train'] = transforms.Compose([
             transforms.Resize(224),
@@ -108,6 +129,8 @@ def main():
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
+
+        print("Base Transforms Set", data_transforms['train'])
 
     kwargs = {'num_workers': 20, 'pin_memory': True}
     if args.augment:
@@ -171,7 +194,8 @@ def main():
     model = model.cuda()
 
     if args.evaluate:
-        prec1 = validate(val_loader, model, args, 0)
+        prec1 = validate(val_loader, model, args, 0, logger=logger)
+        logger.log("prec: %f"%prec1)
         print(prec1)
         exit(0)
 
@@ -277,7 +301,7 @@ def train(train_loader, model, optimizer, base_lrs, iter_stat, epoch, logger, ar
         pbar.set_description("[Step %d/%d][%s]"%(idx_iter + 1, epoch_size, str(csg_weight)) + description)
 
 
-def validate(val_loader, model, args, epoch):
+def validate(val_loader, model, args, epoch, logger=None):
     """Perform validation on the validation set"""
     top1 = AverageMeter()
 
@@ -289,6 +313,7 @@ def validate(val_loader, model, args, epoch):
     bar_format = '{desc}[{elapsed}<{remaining},{rate_fmt}]'
     pbar = tqdm(range(val_size), file=sys.stdout, bar_format=bar_format, ncols=140)
     with torch.no_grad():
+        logger_text = None
         for idx_iter in pbar:
             input, label = next(val_loader_iter)
 
@@ -307,6 +332,12 @@ def validate(val_loader, model, args, epoch):
             description = "[Acc@1-mean: %.2f][Acc@1-cls: %s]"%(top1.vec2sca_avg, str(top1.avg.numpy().round(1)))
             pbar.set_description("[Step %d/%d]"%(idx_iter + 1, val_size) + description)
 
+            logger_text = description
+        
+        # for logger during eval
+        if args.evaluate and logger is not None:
+            logger.log(desc)
+        
     logging.info(' * Prec@1 {top1.vec2sca_avg:.3f}'.format(top1=top1))
     logging.info(' * Prec@1 {top1.avg}'.format(top1=top1))
 

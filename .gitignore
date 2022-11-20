@@ -137,3 +137,6 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# train/eval runs
+runs/
