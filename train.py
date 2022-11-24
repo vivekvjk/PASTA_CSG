@@ -118,7 +118,7 @@ def main():
         
         # add PASTA augmentation with mode, alpha, beta, k params
         if args.use_PASTA:
-            data_transforms['train'].transforms.insert(0, PASTA(args.PASTA_mode, args.PASTA_alpha, args.PASTA_beta, args.PASTA_k))
+            data_transforms['train'].transforms.insert(0, PASTA(mode=args.PASTA_mode, alpha=args.PASTA_alpha, k=args.PASTA_k, beta=args.PASTA_beta))
         
         print("Transforms Augmentation Set", data_transforms['train'])
 
@@ -194,9 +194,8 @@ def main():
     model = model.cuda()
 
     if args.evaluate:
-        prec1 = validate(val_loader, model, args, 0, logger=logger)
+        prec1 = validate(val_loader, model, args, 0)
         logger.log("prec: %f"%prec1)
-        print(prec1)
         exit(0)
 
     # Main training loop
@@ -301,7 +300,7 @@ def train(train_loader, model, optimizer, base_lrs, iter_stat, epoch, logger, ar
         pbar.set_description("[Step %d/%d][%s]"%(idx_iter + 1, epoch_size, str(csg_weight)) + description)
 
 
-def validate(val_loader, model, args, epoch, logger=None):
+def validate(val_loader, model, args, epoch):
     """Perform validation on the validation set"""
     top1 = AverageMeter()
 
@@ -331,12 +330,6 @@ def validate(val_loader, model, args, epoch, logger=None):
 
             description = "[Acc@1-mean: %.2f][Acc@1-cls: %s]"%(top1.vec2sca_avg, str(top1.avg.numpy().round(1)))
             pbar.set_description("[Step %d/%d]"%(idx_iter + 1, val_size) + description)
-
-            logger_text = description
-        
-        # for logger during eval
-        if args.evaluate and logger is not None:
-            logger.log(desc)
         
     logging.info(' * Prec@1 {top1.vec2sca_avg:.3f}'.format(top1=top1))
     logging.info(' * Prec@1 {top1.avg}'.format(top1=top1))
